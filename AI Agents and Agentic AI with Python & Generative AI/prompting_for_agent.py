@@ -2,7 +2,7 @@ from litellm import completion
 from typing import List, Dict
 import os
 
-os.environ['GROQ_API_KEY'] = "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"
+# API key should be set in environment variable GROQ_API_KEY
 
 def generate_response(messages: List[Dict]) -> str:
     """Call LLM to get response"""
