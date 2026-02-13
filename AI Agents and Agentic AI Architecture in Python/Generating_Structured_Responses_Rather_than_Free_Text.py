@@ -181,3 +181,26 @@ def check_purchasing_rules(action_context: ActionContext, invoice_data: dict) ->
 
 
 
+
+    THE EXECUTION OF THE Agent
+
+    invoice_text = """
+    Invoice #4567
+    Date: 2025-02-01
+    Vendor: Tech Solutions Inc.
+    Items: 
+      - Laptop - $1,200
+      - External Monitor - $300
+    Total: $1,500
+"""
+
+# Create an agent instance
+agent = create_invoice_agent()
+
+# Process the invoice
+response = agent.run(f"Process this invoice:\n\n{invoice_text}")
+
+print(response)
+
+
+
