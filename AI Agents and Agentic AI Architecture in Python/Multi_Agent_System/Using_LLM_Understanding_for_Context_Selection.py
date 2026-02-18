@@ -139,3 +139,74 @@ Explain your selection process."""
         "selection_reasoning": selection["reasoning"]
     }
 
+
+
+
+
+# This implementation makes memory selection more intelligent and transparent:
+
+# Each memory gets assigned a unique ID for reference.
+
+# The complete set of memories is presented to the LLM with their IDs.
+
+# The LLM analyzes the memories in the context of the specific task and selects the relevant ones using structured JSON output.
+
+# The LLM provides reasoning for its selection, which is preserved in the original agent’s memory.
+
+# For example, if a project management agent is delegating a budget review task, the interaction might look like this:
+
+
+
+
+
+
+# Example memory contents:
+memories = [
+    {"type": "user", "content": "We need to build a new reporting dashboard"},
+    {"type": "assistant", "content": "Initial cost estimate: $50,000"},
+    {"type": "user", "content": "That seems high"},
+    {"type": "assistant", "content": "Breakdown: $20k development, $15k design..."},
+    {"type": "system", "content": "Project deadline updated to Q3"},
+    {"type": "user", "content": "Can we reduce the cost?"}
+]
+
+# LLM's selection might return:
+{
+    "selected_memories": ["mem_1", "mem_3", "mem_5"],
+    "reasoning": "Selected memories containing cost information and the request for cost reduction, excluding project timeline and general discussion as they're not directly relevant to the budget review task."
+}
+
+
+
+
+# The second agent then receives only the memories about cost estimates, breakdowns,
+# and the request for reduction, giving it focused context for its budget review task without extraneous information about timelines or other project aspects.
+
+# This approach has several advantages over rule-based filtering:
+
+# The selection process can understand context and implications, not just match patterns.
+
+# The reasoning is preserved, helping track why certain information was or wasn’t shared.
+
+# The selection can adapt to different types of tasks and contexts without changing the code.
+
+# The original agent maintains a record of what information was shared and why.
+
+# This pattern is valuable when you want to provide specific context without overwhelming the second agent with irrelevant information. 
+# For example, if a project planning agent asks a budget specialist to review costs, it might share only the memories related to resource allocation and expenses, not the entire project history.
+
+# Recap of the Four Memory Sharing Patterns
+# Each of these patterns serves a different purpose in agent collaboration:
+
+# Message passing keeps interactions simple and focused
+# Memory reflection helps agents learn from each other’s processes
+# Memory handoff enables seamless continuation of complex tasks
+# Selective memory sharing provides relevant context while reducing noise
+# The choice of pattern depends on your specific needs:
+
+# How much context does the second agent need?
+# Does the first agent need to understand the second agent’s process?
+# Should the conversation history be preserved?
+# Is there sensitive information that should be filtered?
+# By understanding these patterns, you can design agent interactions that effectively balance information sharing with task focus, 
+# leading to more efficient and capable multi-agent systems.
