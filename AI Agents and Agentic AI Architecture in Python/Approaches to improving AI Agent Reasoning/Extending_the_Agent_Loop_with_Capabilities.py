@@ -63,3 +63,67 @@ def run(self, user_input: str, memory=None, action_context_props=None):
         # End of loop capabilities
         for capability in self.capabilities:
             capability.end_agent_loop(self, action_context)
+
+
+
+# Each of these interaction points allows a Capability to modify or enhance the agent’s behavior. 
+# Let’s implement time awareness using this pattern.
+
+# Understanding the Capability Class
+# A Capability can interact with the agent loop at multiple points. 
+# Think of these interaction points like hooks or lifecycle events in a web framework - 
+# they give us specific moments where we can modify or enhance the agent’s behavior. Let’s examine the Capability class in detail:
+
+
+class Capability:
+    def __init__(self, name: str, description: str):
+        self.name = name
+        self.description = description
+
+    def init(self, agent, action_context: ActionContext) -> dict:
+        """Called once when the agent starts running."""
+        pass
+
+    def start_agent_loop(self, agent, action_context: ActionContext) -> bool:
+        """Called at the start of each iteration through the agent loop."""
+        return True
+
+    def process_prompt(self, agent, action_context: ActionContext, 
+                      prompt: Prompt) -> Prompt:
+        """Called right before the prompt is sent to the LLM."""
+        return prompt
+
+    def process_response(self, agent, action_context: ActionContext, 
+                        response: str) -> str:
+        """Called after getting a response from the LLM."""
+        return response
+
+    def process_action(self, agent, action_context: ActionContext, 
+                      action: dict) -> dict:
+        """Called after parsing the response into an action."""
+        return action
+
+    def process_result(self, agent, action_context: ActionContext,
+                      response: str, action_def: Action,
+                      action: dict, result: any) -> any:
+        """Called after executing the action."""
+        return result
+
+    def process_new_memories(self, agent, action_context: ActionContext,
+                           memory: Memory, response, result,
+                           memories: List[dict]) -> List[dict]:
+        """Called when new memories are being added."""
+        return memories
+
+    def end_agent_loop(self, agent, action_context: ActionContext):
+        """Called at the end of each iteration through the agent loop."""
+        pass
+
+    def should_terminate(self, agent, action_context: ActionContext,
+                        response: str) -> bool:
+        """Called to check if the agent should stop running."""
+        return False
+
+    def terminate(self, agent, action_context: ActionContext) -> dict:
+        """Called when the agent is shutting down."""
+        pass
