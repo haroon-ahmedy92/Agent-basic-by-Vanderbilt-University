@@ -127,3 +127,248 @@ class Capability:
     def terminate(self, agent, action_context: ActionContext) -> dict:
         """Called when the agent is shutting down."""
         pass
+
+
+
+# Let’s walk through how these methods map to the agent’s execution cycle:
+
+# Initialization Phase The init() method runs once when the agent starts. 
+# This is where you set up any initial state or add starting information to the agent’s memory. 
+# In our TimeAwareCapability, this is where we first tell the agent what time it is.
+
+# Loop Start Phase Before each iteration of the agent loop, start_agent_loop() runs. 
+# You can use this to check conditions or prepare for the next iteration. 
+# For example, you might want to check if enough time has passed since the last iteration.
+
+# Prompt Construction Phase Just before sending a prompt to the LLM, process_prompt() lets you modify the prompt. 
+# Our TimeAwareCapability uses this to add current time information to every prompt.
+
+# Response Processing Phase After getting the LLM’s response but before parsing it, process_response() lets you modify or validate the raw response text.
+
+# Action Processing Phase Once the response is parsed into an action, process_action() lets you modify the action before it’s executed. You might add metadata or validate the action.
+
+# Result Processing Phase After the action executes, process_result() lets you modify the result. This is useful for adding additional context or transforming the result format.
+
+# Memory Update Phase When new memories are being created, process_new_memories() lets you modify what gets stored in memory. You might add additional context or filter certain types of memories.
+
+# Loop End Phase At the end of each iteration, end_agent_loop() runs. This is useful for cleanup or logging what happened during the iteration.
+
+# Termination Phase The should_terminate() method can signal that the agent should stop, and terminate() handles any final cleanup when the agent stops.
+
+# Each of these methods receives both the agent instance and the ActionContext, 
+# giving you access to everything you need to modify the agent’s behavior. The agent processes these methods in sequence using Python’s reduce() function:
+
+
+
+# Example from the agent loop
+prompt = reduce(lambda p, c: c.process_prompt(self, action_context, p),
+               self.capabilities, base_prompt)
+
+
+
+# Each of these methods receives both the agent instance and the ActionContext, 
+# giving you access to everything you need to modify the agent’s behavior. 
+# Looking at the Agent constructor, we can see how capabilities become part of the agent:
+
+
+class Agent:
+    def __init__(self,
+                 goals: List[Goal],
+                 agent_language: AgentLanguage,
+                 action_registry: ActionRegistry,
+                 generate_response: Callable[[Prompt], str],
+                 environment: Environment,
+                 capabilities: List[Capability] = [],
+                 max_iterations: int = 10,
+                 max_duration_seconds: int = 180):
+        """
+        Initialize an agent with its core GAME components and capabilities.
+        
+        Goals, Actions, Memory, and Environment (GAME) form the core of the agent,
+        while capabilities provide ways to extend and modify the agent's behavior.
+        
+        Args:
+            goals: What the agent aims to achieve
+            agent_language: How the agent formats and parses LLM interactions
+            action_registry: Available tools the agent can use
+            generate_response: Function to call the LLM
+            environment: Manages tool execution and results
+            capabilities: List of capabilities that extend agent behavior
+            max_iterations: Maximum number of action loops
+            max_duration_seconds: Maximum runtime in seconds
+        """
+        self.goals = goals
+        self.generate_response = generate_response
+        self.agent_language = agent_language
+        self.actions = action_registry
+        self.environment = environment
+        self.capabilities = capabilities or []
+        self.max_iterations = max_iterations
+        self.max_duration_seconds = max_duration_seconds
+
+
+
+
+# This design lets us compose an agent with exactly the capabilities it needs. 
+# For example, we might create an agent that’s both time-aware and able to log its actions:
+
+
+agent = Agent(
+    goals=[
+        Goal(name="scheduling",
+             description="Schedule meetings considering current time and availability")
+    ],
+    agent_language=JSONAgentLanguage(),
+    action_registry=registry,
+    generate_response=llm.generate,
+    environment=PythonEnvironment(),
+    capabilities=[
+        TimeAwareCapability(),
+        LoggingCapability(log_level="INFO"),
+        MetricsCapability(metrics_server="prometheus:9090")
+    ]
+)
+
+
+
+# Each capability in the list gets a chance to participate in every phase of the agent’s execution. 
+# The agent processes these methods in sequence using Python’s reduce() function:
+
+# The TimeAwareCapability might add time information to a prompt, and then the LoggingCapability could log that time-enhanced prompt before it goes to the LLM.
+
+# This architecture allows us to build complex behaviors by composing simple, focused capabilities, each responsible for one aspect of the agent’s behavior. 
+# It’s similar to how middleware works in web frameworks, where each piece can modify the request/response cycle without the core application needing to know about these modifications.
+
+# Implementing Time Awareness
+# The TimeAwareCapability needs to inform the agent about the current time and ensure this information persists throughout its decision-making process:
+
+
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+class TimeAwareCapability(Capability):
+    def __init__(self):
+        super().__init__(
+            name="Time Awareness",
+            description="Allows the agent to be aware of time"
+        )
+        
+    def init(self, agent, action_context: ActionContext) -> dict:
+        """Set up time awareness at the start of agent execution."""
+        # Get timezone from context or use default
+        time_zone_name = action_context.get("time_zone", "America/Chicago")
+        timezone = ZoneInfo(time_zone_name)
+        
+        # Get current time in specified timezone
+        current_time = datetime.now(timezone)
+        
+        # Format time in both machine and human-readable formats
+        iso_time = current_time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        human_time = current_time.strftime("%H:%M %A, %B %d, %Y")
+        
+        # Store time information in memory
+        memory = action_context.get_memory()
+        memory.add_memory({
+            "type": "system",
+            "content": f"""Right now, it is {human_time} (ISO: {iso_time}).
+            You are in the {time_zone_name} timezone.
+            Please consider the day/time, if relevant, when responding."""
+        })
+        
+    def process_prompt(self, agent, action_context: ActionContext, 
+                      prompt: Prompt) -> Prompt:
+        """Update time information in each prompt."""
+        time_zone_name = action_context.get("time_zone", "America/Chicago")
+        current_time = datetime.now(ZoneInfo(time_zone_name))
+        
+        # Add current time to system message
+        system_msg = (f"Current time: "
+                     f"{current_time.strftime('%H:%M %A, %B %d, %Y')} "
+                     f"({time_zone_name})\n\n")
+        
+        # Add to existing system message or create new one
+        messages = prompt.messages
+        if messages and messages[0]["role"] == "system":
+            messages[0]["content"] = system_msg + messages[0]["content"]
+        else:
+            messages.insert(0, {
+                "role": "system",
+                "content": system_msg
+            })
+            
+        return Prompt(messages=messages)
+
+
+
+
+# Now we can use this capability when creating our agent:
+
+
+agent = Agent(
+    goals=[Goal(name="task", description="Complete the assigned task")],
+    agent_language=JSONAgentLanguage(),
+    action_registry=registry,
+    generate_response=llm.generate,
+    environment=PythonEnvironment(),
+    capabilities=[
+        TimeAwareCapability()
+    ]
+)
+
+
+
+# Our agent now consistently knows the current time, enabling it to make time-aware decisions. 
+# For example, if we ask it to schedule a meeting, it might respond:
+
+# Example conversation
+agent.run("Schedule a team meeting for today")
+
+# Agent response might include:
+"Since it's already 5:30 PM on Friday, I recommend scheduling the meeting 
+for Monday morning instead. Would you like me to look for available times 
+on Monday?"
+
+
+# How Time Awareness Changes Agent Behavior
+# The TimeAwareCapability modifies agent behavior in several ways:
+
+# Through init(): When the agent starts, it establishes baseline time awareness by adding time information to memory.
+
+# Through process_prompt(): Before each prompt, it updates the current time, ensuring the agent always has fresh time data for decision-making.
+
+# The capability’s modifications ripple through the agent’s decision-making process while keeping the core agent loop clean. 
+# We didn’t need to modify the Agent class at all - the capability pattern handled everything.
+
+# Extending the Time Awareness Capability
+# We could extend this capability further to handle more complex time-related features:
+
+
+
+class EnhancedTimeAwareCapability(TimeAwareCapability):
+    def process_action(self, agent, action_context: ActionContext, 
+                      action: dict) -> dict:
+        """Add timing information to action results."""
+        # Add execution time to action metadata
+        action["execution_time"] = datetime.now(
+            ZoneInfo(action_context.get("time_zone", "America/Chicago"))
+        ).isoformat()
+        return action
+        
+    def process_result(self, agent, action_context: ActionContext,
+                      response: str, action_def: Action,
+                      action: dict, result: any) -> any:
+        """Add duration information to results."""
+        if isinstance(result, dict):
+            result["action_duration"] = (
+                datetime.now(ZoneInfo(action_context.get("time_zone"))) -
+                datetime.fromisoformat(action["execution_time"])
+            ).total_seconds()
+        return result
+
+
+
+# This enhanced version tracks when actions are executed and how long they take, 
+# building a richer understanding of time in the agent’s operation.
+
+
