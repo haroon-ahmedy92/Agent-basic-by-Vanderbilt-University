@@ -55,3 +55,97 @@ Task context from memory:
 Provide a well-organized report on the current progress and next steps."""
 
     return prompt_llm(action_context=action_context, prompt=prompt)
+
+
+
+
+# Building a Progress Tracking Capability
+# Now that we have a track_progress function, let’s turn it into a Capability that we can add to our agent. 
+# This capability adds overhead and slows down our agent, since it will add one prompt per agent loop, but it can help with complex tasks where tracking progress is essential. 
+# Here’s how we can implement a capability that tracks progress after each action:
+
+
+
+class ProgressTrackingCapability(Capability):
+    def __init__(self, memory_type="system", track_frequency=1):
+        super().__init__(
+            name="Progress Tracking",
+            description="Tracks progress and enables reflection after actions"
+        )
+        self.memory_type = memory_type
+        self.track_frequency = track_frequency
+        self.iteration_count = 0
+
+    def end_agent_loop(self, agent, action_context: ActionContext):
+        """Generate and store progress report at the end of each iteration."""
+        self.iteration_count += 1
+        
+        # Only track progress on specified iterations
+        if self.iteration_count % self.track_frequency != 0:
+            return
+            
+        # Get the memory and action registry from context
+        memory = action_context.get_memory()
+        action_registry = action_context.get_action_registry()
+        
+        # Generate progress report
+        progress_report = track_progress(
+            action_context=action_context,
+            _memory=memory,
+            action_registry=action_registry
+        )
+        
+        # Add the progress report to memory
+        memory.add_memory({
+            "type": self.memory_type,
+            "content": f"Progress Report (Iteration {self.iteration_count}):\n{progress_report}"
+        })
+
+
+
+
+# This capability uses the track_progress tool to generate detailed progress reports. 
+# Let’s see how it transforms agent behavior in practice:
+
+
+
+
+
+# Create an agent with progress tracking
+agent = Agent(
+    goals=[
+        Goal(
+            name="data_processing",
+            description="Process and analyze customer feedback data"
+        )
+    ],
+    capabilities=[
+        ProgressTrackingCapability(track_frequency=2)  # Track every 2nd iteration
+    ],
+    # ... other agent configuration
+)
+
+# Example execution flow
+memory = agent.run("Analyze customer feedback from Q4 and identify top issues")
+
+
+
+# After each iteration (or every N iterations), the agent will pause to reflect.
+
+# Benefits of End-of-Loop Progress Tracking
+# Tracking progress at the end of each loop iteration (rather than the beginning) offers several advantages:
+
+# The agent can assess the impact of its most recent action
+# Memory contains fresh information about what just happened so that the plan is based on the latest data as opposed to outdated assumptions used in the original plan
+# The agent can adapt its strategy based on actual results
+# Progress reports create a clear audit trail of agent decision-making
+# Using Progress Reports in Decision Making
+# The stored progress reports become part of the agent’s memory, influencing future decisions. When the agent needs to choose its next action, it can reference these reports to:
+
+# Avoid repeating completed steps
+# Address identified blockers
+# Follow through on recommended next steps
+# Use suggested tools effectively
+# The combination of immediate reflection and persistent memory can help the agent maintain focus on its goals while adapting to new information and changing circumstances. 
+# This can be valuable for long-running tasks where maintaining context is crucial for success and identifying when things are going wrong and adapting is important.
+
